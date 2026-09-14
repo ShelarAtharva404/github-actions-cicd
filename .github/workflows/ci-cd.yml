@@ -1,24 +1,18 @@
-name: CI/CD Pipeline
+name: Task Manager CI
 
 on:
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
 
-  # -------------------------
-  # JOB 1: TEST
-  # -------------------------
-  test:
-    name: Run Tests
+  backend-test:
+    name: Backend Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -29,126 +23,65 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
 
       - name: Run tests
-        working-directory: app
+        working-directory: backend
         run: npm test
 
 
-  # -------------------------
-  # JOB 2: BUILD
-  # -------------------------
-  build:
-    name: Build Docker Image
+  frontend-check:
+    name: Frontend Lint and Build
     runs-on: ubuntu-latest
-    needs: test
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs:
+      - backend-test
+      - frontend-check
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend image
         run: |
           docker build \
-            -t github-actions-cicd-lab:${{ github.sha }} \
-            .
+            -t taskmanager-backend:${{ github.sha }} \
+            ./backend
 
-      - name: Save Docker image
+      - name: Build frontend image
         run: |
-          docker save \
-            github-actions-cicd-lab:${{ github.sha }} \
-            -o docker-image.tar
-
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: docker-image.tar
-
-
-  # -------------------------
-  # JOB 3: PUSH TO GHCR
-  # -------------------------
-  push:
-    name: Push Docker Image
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-
-      - name: Load Docker image
-        run: docker load -i docker-image.tar
-
-      - name: Set lowercase image name
-        run: |
-          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/github-actions-cicd-lab" >> "$GITHUB_ENV"
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag Docker image
-        run: |
-          docker tag \
-            github-actions-cicd-lab:${{ github.sha }} \
-            $IMAGE_NAME:${{ github.sha }}
-
-          docker tag \
-            github-actions-cicd-lab:${{ github.sha }} \
-            $IMAGE_NAME:latest
-
-      - name: Push Docker image
-        run: |
-          docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
-
-
-  # -------------------------
-  # JOB 4: DEPLOY
-  # -------------------------
-  deploy:
-    name: Deploy to EC2
-    runs-on: ubuntu-latest
-    needs: push
-
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Set image name
-        run: |
-          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/github-actions-cicd-lab" >> "$GITHUB_ENV"
-
-      - name: Deploy to EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
-
-          ssh -i ~/.ssh/deploy_key \
-            "$EC2_USERNAME@$EC2_HOST" \
-            "docker pull $IMAGE_NAME:${{ github.sha }} && \
-             docker stop github-actions-cicd-lab || true && \
-             docker rm github-actions-cicd-lab || true && \
-             docker run -d \
-               --restart unless-stopped \
-               --name github-actions-cicd-lab \
-               -p 3000:3000 \
-               $IMAGE_NAME:${{ github.sha }}"
+          docker build \
+            -t taskmanager-frontend:${{ github.sha }} \
+            ./frontend
