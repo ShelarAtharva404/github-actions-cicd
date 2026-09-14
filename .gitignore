@@ -11,3 +11,8 @@ node_modules
 dist
 .git
 .env
+
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
