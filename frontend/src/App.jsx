@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./App.css";
 
 const API_URL = "";
 
@@ -20,33 +21,27 @@ function App() {
   };
 
   useEffect(() => {
-  // Load tasks when the application starts.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  fetchTasks();
-}, []);
+    // Load tasks when the application starts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchTasks();
+  }, []);
 
   const addTask = async (event) => {
     event.preventDefault();
 
-    if (!title.trim()) {
-      return;
-    }
+    if (!title.trim()) return;
 
     try {
-      const response = await fetch(`${API_URL}/api/tasks`, {
+      await fetch(`${API_URL}/api/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          title,
-        }),
+        body: JSON.stringify({ title }),
       });
 
-      const newTask = await response.json();
-
-      setTasks((currentTasks) => [newTask, ...currentTasks]);
       setTitle("");
+      fetchTasks();
     } catch (error) {
       console.error("Failed to add task:", error);
     }
@@ -54,7 +49,7 @@ function App() {
 
   const toggleTask = async (task) => {
     try {
-      const response = await fetch(`${API_URL}/api/tasks/${task.id}`, {
+      await fetch(`${API_URL}/api/tasks/${task.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -64,13 +59,7 @@ function App() {
         }),
       });
 
-      const updatedTask = await response.json();
-
-      setTasks((currentTasks) =>
-        currentTasks.map((item) =>
-          item.id === updatedTask.id ? updatedTask : item
-        )
-      );
+      fetchTasks();
     } catch (error) {
       console.error("Failed to update task:", error);
     }
@@ -82,68 +71,102 @@ function App() {
         method: "DELETE",
       });
 
-      setTasks((currentTasks) =>
-        currentTasks.filter((task) => task.id !== id)
-      );
+      fetchTasks();
     } catch (error) {
       console.error("Failed to delete task:", error);
     }
   };
 
+  const completedCount = tasks.filter((task) => task.completed).length;
+
   return (
-    <div className="app">
-      <div className="container">
-        <h1>Task Manager</h1>
+    <main className="app">
+      <section className="container">
+        <header className="hero">
+          <p className="eyebrow">DEVOPS PROJECT</p>
+          <h1>Task Manager</h1>
+          <p className="subtitle">
+            Manage your tasks with React, Node.js, PostgreSQL & AWS.
+          </p>
+        </header>
 
-        <p className="subtitle">
-          Full-stack application with React, Node.js and PostgreSQL
-        </p>
+        <section className="stats">
+          <div className="stat-card">
+            <span>Total Tasks</span>
+            <strong>{tasks.length}</strong>
+          </div>
 
-        <form onSubmit={addTask} className="task-form">
+          <div className="stat-card">
+            <span>Completed</span>
+            <strong>{completedCount}</strong>
+          </div>
+
+          <div className="stat-card">
+            <span>Remaining</span>
+            <strong>{tasks.length - completedCount}</strong>
+          </div>
+        </section>
+
+        <form className="task-form" onSubmit={addTask}>
           <input
             type="text"
-            placeholder="Enter a task..."
+            placeholder="What needs to be done?"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
           />
 
-          <button type="submit">
-            Add Task
-          </button>
+          <button type="submit">Add Task</button>
         </form>
 
-        <div className="tasks">
+        <section className="task-list">
           {loading ? (
-            <p>Loading tasks...</p>
+            <div className="empty-state">Loading tasks...</div>
           ) : tasks.length === 0 ? (
-            <p>No tasks yet. Add your first task!</p>
+            <div className="empty-state">
+              <div className="empty-icon">✓</div>
+              <h2>No tasks yet</h2>
+              <p>Add your first task above.</p>
+            </div>
           ) : (
             tasks.map((task) => (
-              <div className="task" key={task.id}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={task.completed}
-                    onChange={() => toggleTask(task)}
-                  />
+              <article
+                className={`task ${task.completed ? "completed" : ""}`}
+                key={task.id}
+              >
+                <button
+                  className="checkbox"
+                  type="button"
+                  onClick={() => toggleTask(task)}
+                  aria-label={
+                    task.completed
+                      ? "Mark task incomplete"
+                      : "Mark task complete"
+                  }
+                >
+                  {task.completed ? "✓" : ""}
+                </button>
 
-                  <span className={task.completed ? "completed" : ""}>
-                    {task.title}
-                  </span>
-                </label>
+                <span className="task-title">{task.title}</span>
 
                 <button
                   className="delete"
+                  type="button"
                   onClick={() => deleteTask(task.id)}
                 >
                   Delete
                 </button>
-              </div>
+              </article>
             ))
           )}
-        </div>
-      </div>
-    </div>
+        </section>
+
+        <footer>
+          <span>Running on AWS</span>
+          <span>•</span>
+          <span>Powered by Docker</span>
+        </footer>
+      </section>
+    </main>
   );
 }
 
