@@ -110,3 +110,37 @@ jobs:
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
             ${{ env.FRONTEND_IMAGE }}:latest
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    needs:
+      - docker-publish
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/taskmanager-key.pem
+          chmod 600 ~/.ssh/taskmanager-key.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy production compose file
+        run: |
+          scp \
+            -i ~/.ssh/taskmanager-key.pem \
+            docker-compose.prod.yml \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/opt/taskmanager/docker-compose.prod.yml
+
+      - name: Deploy application
+        run: |
+          ssh \
+            -i ~/.ssh/taskmanager-key.pem \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            'cd /opt/taskmanager && docker compose --env-file .env -f docker-compose.prod.yml pull && docker compose --env-file .env -f docker-compose.prod.yml up -d && docker image prune -f'
