@@ -1,0 +1,118 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run tests
+        working-directory: app
+        run: npm test
+
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t github-actions-cicd-lab:${{ github.sha }} \
+            .
+
+      - name: Save Docker image
+        run: |
+          docker save \
+            github-actions-cicd-lab:${{ github.sha }} \
+            -o docker-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: docker-image.tar
+
+
+  push:
+    name: Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i docker-image.tar
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag Docker image
+        run: |
+          docker tag \
+            github-actions-cicd-lab:${{ github.sha }} \
+            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:${{ github.sha }}
+
+          docker tag \
+            github-actions-cicd-lab:${{ github.sha }} \
+            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:latest
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:${{ github.sha }}
+
+          docker push \
+            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:latest
+
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy application
+        run: |
+          echo "Deploying Docker image..."
+          echo "Image:"
+          echo "ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:${{ github.sha }}"
+          echo "Deployment successful!"
