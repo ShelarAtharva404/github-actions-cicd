@@ -117,7 +117,7 @@ jobs:
   # JOB 4: DEPLOY
   # -------------------------
   deploy:
-    name: Deploy
+    name: Deploy to EC2
     runs-on: ubuntu-latest
     needs: push
 
@@ -128,8 +128,26 @@ jobs:
         run: |
           echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/github-actions-cicd-lab" >> "$GITHUB_ENV"
 
-      - name: Deploy application
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          echo "Deploying Docker image..."
-          echo "Image: $IMAGE_NAME:${{ github.sha }}"
-          echo "Deployment successful!"
+          mkdir -p ~/.ssh
+
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key \
+            "$EC2_USERNAME@$EC2_HOST" \
+            "docker pull $IMAGE_NAME:${{ github.sha }} && \
+             docker stop github-actions-cicd-lab || true && \
+             docker rm github-actions-cicd-lab || true && \
+             docker run -d \
+               --restart unless-stopped \
+               --name github-actions-cicd-lab \
+               -p 3000:3000 \
+               $IMAGE_NAME:${{ github.sha }}"
