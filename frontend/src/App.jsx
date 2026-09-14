@@ -20,8 +20,10 @@ function App() {
   };
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
+  // Load tasks when the application starts.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  fetchTasks();
+}, []);
 
   const addTask = async (event) => {
     event.preventDefault();
