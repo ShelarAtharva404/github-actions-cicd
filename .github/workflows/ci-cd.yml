@@ -14,6 +14,9 @@ permissions:
 
 jobs:
 
+  # -------------------------
+  # JOB 1: TEST
+  # -------------------------
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -32,6 +35,9 @@ jobs:
         run: npm test
 
 
+  # -------------------------
+  # JOB 2: BUILD
+  # -------------------------
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
@@ -60,6 +66,9 @@ jobs:
           path: docker-image.tar
 
 
+  # -------------------------
+  # JOB 3: PUSH TO GHCR
+  # -------------------------
   push:
     name: Push Docker Image
     runs-on: ubuntu-latest
@@ -77,6 +86,10 @@ jobs:
       - name: Load Docker image
         run: docker load -i docker-image.tar
 
+      - name: Set lowercase image name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/github-actions-cicd-lab" >> "$GITHUB_ENV"
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -88,31 +101,35 @@ jobs:
         run: |
           docker tag \
             github-actions-cicd-lab:${{ github.sha }} \
-            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:${{ github.sha }}
+            $IMAGE_NAME:${{ github.sha }}
 
           docker tag \
             github-actions-cicd-lab:${{ github.sha }} \
-            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:latest
+            $IMAGE_NAME:latest
 
       - name: Push Docker image
         run: |
-          docker push \
-            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:${{ github.sha }}
-
-          docker push \
-            ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
 
 
+  # -------------------------
+  # JOB 4: DEPLOY
+  # -------------------------
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     needs: push
+
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
+      - name: Set image name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/github-actions-cicd-lab" >> "$GITHUB_ENV"
+
       - name: Deploy application
         run: |
           echo "Deploying Docker image..."
-          echo "Image:"
-          echo "ghcr.io/${{ github.repository_owner }}/github-actions-cicd-lab:${{ github.sha }}"
+          echo "Image: $IMAGE_NAME:${{ github.sha }}"
           echo "Deployment successful!"
