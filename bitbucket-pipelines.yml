@@ -1,0 +1,8 @@
+pipelines:
+  default:
+    - step:
+        name: Hello Bitbucket
+        script:
+          - echo "Hello from Bitbucket Pipelines!"
+          - echo "Repository: $BITBUCKET_REPO_FULL_NAME"
+          - echo "Commit: $BITBUCKET_COMMIT"
